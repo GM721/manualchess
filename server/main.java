@@ -5,8 +5,6 @@ class Main
 {
 	static public void main(String[] args)
 	{
-		while (true)
-		{
 			try
 			{
 				ServerSocket buba = new ServerSocket(228);
@@ -18,6 +16,5 @@ class Main
 			catch(Exception e)
 			{
 			}
-		}
 	}
 }
