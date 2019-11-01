@@ -1,2 +1,3 @@
 # manualchess
 Strategic game
+dkfnglkdkn
