@@ -1,0 +1,2 @@
+# manualchess
+Strategic game
