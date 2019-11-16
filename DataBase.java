@@ -1,26 +1,25 @@
-package com.example.waghstrategy;
-
 import java.sql.*;
 import java.io.*;
+import waghstrategy.*;
 
-public class DataBase
+class Database
 {
 	static String JDBC_DRIVER = "com.mysql.jdbc.Driver";
 	static String DB_URL = "jdbc:mysql://localhost/manualchess";
 	static String DB_USER = "user";
 	static String DB_PASS = "pass";
 	Connection conn;
-	public DataBase() throws SQLException
+	Database() throws SQLException
 	{
 		conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
 	}
-	public void execUpdate(String sql) throws SQLException
+	public void execUpdate(String sql)
 	{
 		Statement stmt = conn.createStatement();
 		stmt.executeUpdate(sql);
 		stmt.close();
 	}
-	public void addUser(PlayerRegister user) throws SQLException
+	public void adduser(PlayerRegister user) throws SQLException
 	{
 		Statement stmt = conn.createStatement();
 		stmt.executeUpdate("INSERT INTO users (nickname, email, password, connectionKey) VALUES (" + user.nickname + "," + user.email + "," + user.password + "," + user.connectionKey + ");");
