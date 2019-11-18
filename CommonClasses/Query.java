@@ -1,5 +1,4 @@
-package CommonClasses;
-
+package com.company.CommnClasses;
 
 import java.io.Serializable;
 
@@ -10,8 +9,8 @@ public class Query implements Serializable {
     public String operation;
 
     Query(Integer connectionKey,String nickname,String operation){
-    	this.connectionKey = connectionKey;
-	this.nickname = nickname;
-    	this.operation = operation;
+        this.connectionKey = connectionKey;
+        this.nickname = nickname;
+        this.operation = operation;
     }
 }
