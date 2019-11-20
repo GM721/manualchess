@@ -1,8 +1,8 @@
-package com.company;
 
 
-import com.company.CommnClasses.*;
-import com.company.DataBase.*;
+
+import CommonClasses.*;
+import DataBase.*;
 
 import java.net.*;
 import java.io.*;
@@ -27,6 +27,8 @@ public class Main {
             DataBase db= new DataBase();
             //long time= Long.parseLong(new SimpleDateFormat("yyyyMMddHHmmss").format(new Date()));
 
+	    Map<String, ObjectOutputStream> onlineUsers = new HashMap<String, ObjectOutputStream>();
+
             while (true) {
                 try (
                         ServerSocket serverSocket = new ServerSocket(48651);
@@ -41,6 +43,10 @@ public class Main {
                     System.out.println("00");
                     try {
                         while ((input = (Query) in.readObject()) != null) {
+				if (!onlineUsers.containsKey(input.nickname))
+				{
+					onlineUsers.put(input.nickname, out);
+				}
                             System.out.print(input.operation);
                             System.out.println("ll");
                             if (input.operation.equals("registration"))
@@ -115,6 +121,8 @@ public class Main {
                                     isOk = true;
                                     description = "Exit is finished correctly";
                                     db.dropConnKey(input.nickname);
+				    db.setOffline(input.nickname);
+				    onlineUsers.remove(input.nickname);
                                 }
                                 else
                                 {
@@ -127,7 +135,7 @@ public class Main {
                             }
                             else if (input.operation.equals("message")){
                                 MessageQuery mq = (MessageQuery)input;
-                                Date time=db.addMassage(mq);
+                                Date time=db.addMessage(mq);
                                 System.out.println(time);
                                 if(!time.equals(null)){
                                     MessageAnswer ans = new MessageAnswer(true, "message added",mq,time);
@@ -137,7 +145,6 @@ public class Main {
                                     MessageAnswer ans = new MessageAnswer(false, "message did not add",mq,time);
                                     out.writeObject(ans);
                                 }
-
                             }
                             else if (input.operation.equals("startGettingMessages")){
 

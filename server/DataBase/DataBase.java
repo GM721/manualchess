@@ -1,6 +1,6 @@
-package com.company.DataBase;
+package DataBase;
 
-import com.company.CommnClasses.*;
+import CommonClasses.*;
 
 import  java.sql.*;
 import java.io.*;
@@ -12,8 +12,8 @@ public class DataBase
     {
         static String JDBC_DRIVER = "com.mysql.jdbc.Driver";
         static String DB_URL = "jdbc:mysql://localhost/manualchess";
-        static String DB_USER = "root";
-        static String DB_PASS = "1234";
+        static String DB_USER = "user";
+        static String DB_PASS = "pass";
         Connection conn;
         public DataBase() throws SQLException, ClassNotFoundException, InstantiationException
         {
@@ -21,7 +21,9 @@ public class DataBase
                 DriverManager.registerDriver((Driver) Class.forName("com.mysql.jdbc.Driver").newInstance());
                 conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
             }
-            catch (Exception e){};
+            catch (Exception e){	
+		    e.printStackTrace();
+	    };
         }
         public void execUpdate(String sql) throws SQLException
         {
@@ -38,7 +40,7 @@ public class DataBase
         public Boolean freeNickname (String nickname) throws SQLException
         {
             Statement stmt = conn.createStatement();
-            ResultSet rs = stmt.executeQuery("SELECT * FROM users WHERE nickname=" + nickname + ";");
+            ResultSet rs = stmt.executeQuery("SELECT * FROM users WHERE nickname='" + nickname + "';");
             if (!rs.next()) {
                 stmt.close();
                 rs.close();
@@ -53,7 +55,7 @@ public class DataBase
         public Boolean freeEmail (String  email) throws SQLException
         {
             Statement stmt = conn.createStatement();
-            ResultSet rs = stmt.executeQuery("SELECT * FROM users WHERE email=" + email + ";");
+            ResultSet rs = stmt.executeQuery("SELECT * FROM users WHERE email='" + email + "';");
             if (!rs.next()) {
                 stmt.close();
                 rs.close();
@@ -68,7 +70,7 @@ public class DataBase
         public Boolean freePassword (String  pass) throws SQLException
         {
             Statement stmt = conn.createStatement();
-            ResultSet rs = stmt.executeQuery("SELECT * FROM users WHERE password=" + pass + ";");
+            ResultSet rs = stmt.executeQuery("SELECT * FROM users WHERE password='" + pass + "';");
             if (!rs.next()) {
                 stmt.close();
                 rs.close();
@@ -108,12 +110,13 @@ public class DataBase
             stmt.close();
         }
 
-        public Date addMassage(MessageQuery message) throws SQLException {
+        public Date addMessage(MessageQuery message) throws SQLException, IOException {
             Statement stmt = conn.createStatement();
             String time= new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
             //Date time = new Date();
             stmt.executeUpdate("INSERT INTO messages (sender,receiver,message_time, message) VALUES ('"+ message.nickname +"','"+ message.collocutor +"','"+time +"','"+ message.message +"');");
             ResultSet rs = stmt.executeQuery("SELECT message_time FROM messages WHERE sender  = '" + message.nickname+"' AND  receiver = '" + message.collocutor+ "' AND message_time = '"+time+"' ;");
+	    MessageSender.send(message);
             if( rs.next()) {
                 Date re =rs.getDate("message_time");
                 stmt.close();

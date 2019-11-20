@@ -1,4 +1,4 @@
-package com.company.CommnClasses;
+package CommonClasses;
 
 import java.io.Serializable;
 
