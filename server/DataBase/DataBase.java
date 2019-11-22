@@ -86,9 +86,9 @@ public class DataBase
         public Boolean checkUser(PlayerAuthorise user) throws SQLException
         {
             Statement stmt = conn.createStatement();
-            ResultSet rs = stmt.executeQuery("SELECT password FROM users WHERE nickname='" + user.nickname + "';");
+            ResultSet rs = stmt.executeQuery("SELECT password, connectionKey FROM users WHERE nickname='" + user.nickname + "';");
             rs.next();
-            return user.password.equals(rs.getString("password"));
+            return user.password.equals(rs.getString("password")) && rs.getInt("connectionKey") == 0;
         }
         public int getConnectionKey(String nickname) throws SQLException
         {
