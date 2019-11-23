@@ -1,4 +1,4 @@
-package com.example.waghstrategy;
+package manualchess.application.waghstrategy;
 
 import android.content.Context;
 

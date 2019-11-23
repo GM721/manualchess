@@ -1,12 +1,13 @@
-package com.example.waghstrategy;
+package manualchess.application;
 
 import android.app.Application;
 
-import androidx.lifecycle.ViewModelProviders;
-
 public class MyApplication extends Application {
+    BigBlackBox bigBlackBox = null;
     @Override
     public void onCreate() {
         super.onCreate();
+        bigBlackBox = BigBlackBox.getBigBlackBox(this,"0.tcp.ngrok.io",19642);
     }
+
 }

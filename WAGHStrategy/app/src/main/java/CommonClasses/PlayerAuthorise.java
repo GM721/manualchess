@@ -1,12 +1,12 @@
-package com.example.waghstrategy;
+package CommonClasses;
 
 import java.io.Serializable;
 
 public class PlayerAuthorise extends Query implements Serializable {
     private static final long serialVersionUID = 4;
-    String password;
+    public String password;
 
-    PlayerAuthorise(Integer connectionKey, String nickname,String password, String operation) {
+    public PlayerAuthorise(Integer connectionKey, String nickname,String password, String operation) {
         super(connectionKey, nickname, operation);
         connectionKey=null;
         this.password = password;
