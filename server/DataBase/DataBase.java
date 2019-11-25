@@ -7,6 +7,7 @@ import java.io.*;
 import java.text.SimpleDateFormat;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
+import java.util.*;
 
 public class DataBase
     {
@@ -147,6 +148,29 @@ public class DataBase
             stmt.close();
             return (rs.getDate("online"));
         }
+	public MessagesAnswer getNewMessages(RequestMessagesQuery rmq)
+	{
+		MessagesAnswer ans = new MessagesAnswer();
+		try
+		{
+			Statement stmt = conn.createStatement();
+			ResultSet rs = stmt.executeQuery("select * from messages where date > '" + (new SimpleDateFormat("yyyymmddhhmmss")).format(rmq.dateOfLastMessage) +
+					"' and (sender = '" + rmq.nickname + "' or receiver = '" + rmq.nickname + "');");
+			while (rs.next())
+			{
+				Calendar date = Calendar.getInstance();
+				date.setTime(rs.getDate("date"));
+				ans.messages.add(new Message(rs.getString("sender"), rs.getString("receiver"), rs.getString("message"), date));
+			}
+			ans.isOk = true;
+		}
+		catch (Exception e)
+		{
+			ans.isOk = false;
+			ans.description = "Something went wrong. :(";
+		}
+		return ans;
+	}
         /*private void test () throws SQLException{
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("NOW();");

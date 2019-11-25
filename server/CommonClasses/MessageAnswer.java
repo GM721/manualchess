@@ -9,7 +9,7 @@ public class MessageAnswer extends CollocutorAnswer implements Serializable {
     public String message;
     public Date date;
     MessageAnswer(Boolean isOk, String description,String collocutor, String sender, String receiver , String message, Date date){
-        super(isOk,"message",description,collocutor);
+        super(isOk,"message", description, collocutor);
         this.sender=sender;
         this.receiver=receiver;
         this.message=message;

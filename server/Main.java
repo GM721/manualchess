@@ -29,6 +29,7 @@ public class Main{
 			messageSender = new MessageSender(onlineUsers);
 		
 			ServerSocket serverSocket = new ServerSocket(48651);
+			System.out.println(serverSocket.getSoTimeout());
 			while (true) {
 				try {
 						Socket clientSocket = serverSocket.accept();
@@ -188,15 +189,12 @@ class UserThread extends Thread
                                     out.writeObject(ans);
                                 }
                             }
-                            else if (input.operation.equals("startGettingMessages")){
-
-                                db.setOnline(input.nickname);
-
-                            }
-                            else if (input.operation.equals("finishGettingMessages")){
-
-                                db.setOffline(input.nickname);
-                            }
+                            else if (input.operation.equals("startGettingMessages"))
+			    {
+				    RequestMessagesQuery query = (RequestMessagesQuery)input;
+				    MessagesAnswer ans = db.getNewMessages(query);
+				    out.writeObject(ans);
+			    }
 			    out.flush();
                     }
 
