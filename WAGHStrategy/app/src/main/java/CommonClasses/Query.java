@@ -1,4 +1,4 @@
-package com.example.waghstrategy;
+package CommonClasses;
 
 import java.io.Serializable;
 
@@ -9,7 +9,7 @@ public class Query implements Serializable {
     public String operation;
 
 
-    Query(Integer connectionKey, String nickname, String operation){
+    public Query(Integer connectionKey, String nickname, String operation){
         this.connectionKey = connectionKey;
         this.nickname = nickname;
         this.operation = operation;
