@@ -4,6 +4,7 @@ import java.util.Calendar;
 import java.util.Date;
 
 public class MessageAnswer extends Answer {
+    private static final long serialVersionUID = 9;
     public String sender;
     public String receiver;
     public String message;

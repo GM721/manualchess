@@ -3,6 +3,7 @@ package CommonClasses;
 import java.util.Calendar;
 
 public class Message {
+    private static final long serialVersionUID = 8;
     public String sender;
     public String receiver;
     public String message;
