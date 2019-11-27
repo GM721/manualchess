@@ -3,7 +3,6 @@ package manualchess.application;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
-import android.net.ConnectivityManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -18,29 +17,44 @@ import java.io.StreamCorruptedException;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.TreeMap;
 
 import CommonClasses.Answer;
 import CommonClasses.AuthorisationAnswer;
+import CommonClasses.MessageAnswer;
+import CommonClasses.MessagesAnswer;
 import CommonClasses.PlayerAuthorise;
 import CommonClasses.PlayerRegister;
 import CommonClasses.Query;
+import CommonClasses.RequestMessagesQuery;
 import CommonClasses.User;
+import UtilClasses.MutatorOfNotifiableDataArray;
+import UtilClasses.NotifiableDataArray;
 
 public class BigBlackBox{
 
-    static BigBlackBox bigBlackBox;
-    private boolean isOnline = false;//TODO Необходимо следить за отключениями от сети и подключениями к ней
+    private boolean isOnline = false;
     private boolean isEstablishing = false;
+    private boolean isAuthorising = false;
+    private boolean isPrepared = false;
+    static BigBlackBox bigBlackBox;
     private SQLiteDatabase cachedUsersDB;
     private ObjectOutputStream serverOutputStream;
     String ngrokHost;
     int port;
     public User currentUser = null;
-    private BlackHandler handler;
+    public String currentCollocutor;
+    private AuthorisationHandler authHandler;
+    private DialogueHandler dialogueHandler;
     private Pair<Runnable,Runnable> SucessAndFailRunnables;
     private Context appContext;
-    private boolean isAuthorising = false;
+    private TreeMap<String,CommonClasses.Message> lastCachedMessages;
+    private NotifiableDataArray<String,CommonClasses.Message> notifiableDataArray;
+    private MutatorOfNotifiableDataArray<String,CommonClasses.Message> mutatorOfNotifiableDataArray;
+    private TreeMap<String,Pair<Runnable,Runnable>> runnableStorage;
+
+
     private final static int REGISTER=20;
     private final static int REGISTERERROR=21;
     private final static int REGISTERINPROCESS=22;
@@ -52,7 +66,6 @@ public class BigBlackBox{
     private final static int LOGOUTERROR=41;
     private final static int LOGOUTINPROCESS=42;
     private final static String CONNECTIONERRORCOMMENTARY="Connection lost";
-    TreeMap<String,Pair<Runnable,Runnable>> runnableStorage=null;
 
     private BigBlackBox(Context appContext, String ngrokHost,int port){
         cachedUsersDB = new SQLiteCachedUsers(appContext).getWritableDatabase();
@@ -60,7 +73,8 @@ public class BigBlackBox{
         this.port = port;
         establishConnection(ngrokHost,port);
         bigBlackBox = this;
-        handler = new BlackHandler(Looper.getMainLooper());
+        authHandler = new AuthorisationHandler(Looper.getMainLooper());
+        dialogueHandler = new DialogueHandler(Looper.getMainLooper());
         this.appContext = appContext;
         runnableStorage = new TreeMap<String,Pair<Runnable,Runnable>>();
     }
@@ -158,12 +172,12 @@ public class BigBlackBox{
         if(answer.operation.equals("registration")){
             if(answer.isOk){
                 cacheUser((AuthorisationAnswer) answer);
-                handler.obtainMessage(REGISTER,
+                authHandler.obtainMessage(REGISTER,
                         new RunnableWithCommentary(SucessAndFailRunnables.firstObj,answer.description)).sendToTarget();
                 isAuthorising=false;
             }
             else{
-                handler.obtainMessage(REGISTERERROR,
+                authHandler.obtainMessage(REGISTERERROR,
                         new RunnableWithCommentary(SucessAndFailRunnables.secondObj,answer.description)).sendToTarget();
                 isAuthorising=false;
                 Log.d("RegAnswer",answer.description);
@@ -172,12 +186,12 @@ public class BigBlackBox{
         else if(answer.operation.equals("authorisation")){
             if(answer.isOk){
                 cacheUser((AuthorisationAnswer) answer);
-                handler.obtainMessage(AUTHORISE,
+                authHandler.obtainMessage(AUTHORISE,
                         new RunnableWithCommentary(SucessAndFailRunnables.firstObj,answer.description)).sendToTarget();
                 isAuthorising=false;
             }
             else{
-                handler.obtainMessage(AUTHORISEERROR,
+                authHandler.obtainMessage(AUTHORISEERROR,
                         new RunnableWithCommentary(SucessAndFailRunnables.secondObj,answer.description)).sendToTarget();
                 isAuthorising=false;
                 Log.d("AuthAnswer",answer.description);
@@ -188,17 +202,43 @@ public class BigBlackBox{
                 unauthoriseUser(((AuthorisationAnswer)answer).nickname);
                 Runnable sucess = runnableStorage.get("exit").firstObj;
                 runnableStorage.put("exit", null);
-                handler.obtainMessage(LOGOUT,new RunnableWithCommentary(sucess,
+                authHandler.obtainMessage(LOGOUT,new RunnableWithCommentary(sucess,
                         "Successfull logout")).sendToTarget();
             }else{
                 Log.d("UnauthAnswer",answer.description);
                 Runnable failure = runnableStorage.get("exit").secondObj;
                 runnableStorage.put("exit", null);
-                handler.obtainMessage(LOGOUTERROR,new RunnableWithCommentary(failure,
+                authHandler.obtainMessage(LOGOUTERROR,new RunnableWithCommentary(failure,
                         answer.description)).sendToTarget();
                 failure.run();
             }
-        }else{
+        }else if(answer.operation.equals("message array")){
+            if(answer.isOk) {
+                MessagesAnswer messagesAnswer = (MessagesAnswer) answer;
+                ArrayList<CommonClasses.Message> messages = messagesAnswer.messages;
+                for (CommonClasses.Message message:messages) {
+                    addMessageToDB(message);
+                }
+            }else{
+                Log.d("Message array",answer.description);
+            }
+        }else if(answer.operation.equals("message")){
+            if(answer.isOk){
+                MessageAnswer messageAnswer = (MessageAnswer) answer;
+                addMessageToDB(new CommonClasses.Message(messageAnswer));
+                Log.d("Message_ok","Received");
+                Log.d("Message_ok","Is this earlier:" +
+                        mutatorOfNotifiableDataArray.getData(currentUser.nickname).date.before(messageAnswer.date));
+                if(!messageAnswer.sender.equals(currentUser.nickname) &&
+                mutatorOfNotifiableDataArray.getData(currentUser.nickname).date.before(messageAnswer.date)) {
+                    mutatorOfNotifiableDataArray.addOrChangeItem(messageAnswer.sender,new CommonClasses.Message(messageAnswer));
+                }
+            }
+            else{
+                Log.d("Message",answer.description);
+            }
+        }
+        else{
             Log.d("WTF","Description:" + answer.description + "\nOperation:" + answer.operation);
         }
     }
@@ -226,20 +266,20 @@ public class BigBlackBox{
                         } else {
                             isAuthorising = false;
                             Log.d("Auth", "You are offline,connection timed out");
-                            handler.obtainMessage(CONNECTIONERROR,
+                            authHandler.obtainMessage(CONNECTIONERROR,
                                     new RunnableWithCommentary(onFailedAction,CONNECTIONERRORCOMMENTARY)).sendToTarget();
                         }
                     } catch (IOException | InterruptedException e) {
                         isAuthorising = false;
                         Log.d("IOException", "could not write to a socket");
-                        handler.obtainMessage(CONNECTIONERROR,
+                        authHandler.obtainMessage(CONNECTIONERROR,
                                 new RunnableWithCommentary(onFailedAction,CONNECTIONERRORCOMMENTARY)).sendToTarget();
                         e.printStackTrace();
                     }
                 }
             }).start();
         }else {
-            handler.obtainMessage(REGISTERINPROCESS,
+            authHandler.obtainMessage(REGISTERINPROCESS,
                     new RunnableWithCommentary(onFailedAction,"Registration already in process")).sendToTarget();
             Log.d("Registration","Request already sent");
         }
@@ -268,22 +308,23 @@ public class BigBlackBox{
                                 SucessAndFailRunnables = new Pair<Runnable, Runnable>(onSucessfullAction, onFailedAction);
                             } else {
                                 Log.d("Connection", "Authorise requested without connection");
-                                handler.obtainMessage(CONNECTIONERROR,
+                                authHandler.obtainMessage(CONNECTIONERROR,
                                         new RunnableWithCommentary(onFailedAction, CONNECTIONERRORCOMMENTARY)).sendToTarget();
                             }
                         } catch (InterruptedException | IOException ie) {
-                            handler.obtainMessage(CONNECTIONERROR,
+                            authHandler.obtainMessage(CONNECTIONERROR,
                                     new RunnableWithCommentary(onFailedAction, CONNECTIONERRORCOMMENTARY)).sendToTarget();
                             ie.printStackTrace();
                         }
                     } else{
-                        switchCurrentUser(playerAuthorise.nickname);
-                        onSucessfullAction.run();
+                        prepareDialogSystem(playerAuthorise.nickname);
+                        authHandler.obtainMessage(AUTHORISE,
+                                new RunnableWithCommentary(onSucessfullAction,"someinfo"));
                     }
                 }
             }).start();
         }else{
-            handler.obtainMessage(AUTHORISEINPROCESS,
+            authHandler.obtainMessage(AUTHORISEINPROCESS,
                     new RunnableWithCommentary(onFailedAction,"Authorise already in process")).sendToTarget();
             Log.d("Authorisation","Request already sent");
         }
@@ -323,18 +364,18 @@ public class BigBlackBox{
                         } else {
                             runnableStorage.put("exit", null);
                             Log.d("Connection", "Unauthorisation could not be done:connection lost");
-                            handler.obtainMessage(CONNECTIONERROR,
+                            authHandler.obtainMessage(CONNECTIONERROR,
                                     new RunnableWithCommentary(onFailedAction, CONNECTIONERRORCOMMENTARY)).sendToTarget();
                         }
                     } catch (IOException | InterruptedException e) {
                         runnableStorage.put("exit", null);
                         e.printStackTrace();
-                        handler.obtainMessage(CONNECTIONERROR,
+                        authHandler.obtainMessage(CONNECTIONERROR,
                                 new RunnableWithCommentary(onFailedAction, CONNECTIONERRORCOMMENTARY)).sendToTarget();
                     }
 
                 }else {
-                    handler.obtainMessage(LOGOUTINPROCESS,
+                    authHandler.obtainMessage(LOGOUTINPROCESS,
                             new RunnableWithCommentary(onFailedAction,"Log out already in process")).sendToTarget();
                     Log.d("LOGOUT", "INPROCESS");
                 }
@@ -342,18 +383,19 @@ public class BigBlackBox{
         }).start();
     }
 
+
     private void cacheUser(final AuthorisationAnswer authAnswer){
         Log.d("Answer",authAnswer.nickname);
         cachedUsersDB.execSQL("INSERT INTO " + LoggedUsersContract.LoggedUsers.tableName +
                 " VALUES (\'" +  authAnswer.nickname +"\', \'" + authAnswer.connectionKey + "\');");
-        currentUser = new User(authAnswer.nickname,authAnswer.connectionKey);
+        prepareDialogSystem(authAnswer.nickname);
     }
 
     private void unauthoriseUser(String nickname){
         cachedUsersDB.execSQL("DELETE FROM " + LoggedUsersContract.LoggedUsers.tableName + " WHERE "+
                 LoggedUsersContract.LoggedUsers.nickname+"="+"'"+nickname+"'");
         Log.d("UnauthAnswer","Unauthorisation completed");
-        currentUser=null;
+        currentUser=null;//TODO nullate all observers
     }
 
     private boolean isAuthorised(String nickname){
@@ -367,19 +409,6 @@ public class BigBlackBox{
         }
     }
 
-    public void switchCurrentUser(final String nickname){
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                Cursor cursor = cachedUsersDB.query(LoggedUsersContract.LoggedUsers.tableName,
-                        new String[]{LoggedUsersContract.LoggedUsers.nickname,LoggedUsersContract.LoggedUsers.connectionKey},
-                        LoggedUsersContract.LoggedUsers.nickname + "=" + "'" + nickname + "'",null,null,
-                        null,null);
-                cursor.moveToNext();
-                currentUser = new User(cursor.getString(0),cursor.getInt(1));
-            }
-        }).start();
-    }
 
     public String[] getCachedUsers(){
         ArrayList<String> cachedUsers = new ArrayList<String>();
@@ -393,33 +422,107 @@ public class BigBlackBox{
         return cachedUsers.toArray(new String[cachedUsers.size()]);
     }
 
+//_______________________________________________Database methods____________________________________________________________
 
-
-    public void logDatabase(){
+    public void prepareDialogSystem(final String nickname){
         new Thread(new Runnable() {
             @Override
             public void run() {
-                Cursor cursor = cachedUsersDB.query(
-                        LoggedUsersContract.LoggedUsers.tableName,
-                        new String[] {LoggedUsersContract.LoggedUsers.nickname, LoggedUsersContract.LoggedUsers.connectionKey},
-                        null,null,null,null,null);
+                lastCachedMessages = new TreeMap<String, CommonClasses.Message>();
+                Cursor cursor = cachedUsersDB.query(LoggedUsersContract.LoggedUsers.tableName,
+                        new String[]{LoggedUsersContract.LoggedUsers.connectionKey},
+                        LoggedUsersContract.LoggedUsers.nickname + "=" + "\'" + nickname + "\'",null,null,null,null);
+                cursor.moveToNext();
+                int key = cursor.getInt(0);
+                currentUser = new User(nickname,key);
+                cursor = cachedUsersDB.query(LoggedUsersContract.UserMessages.tableName,
+                        new String[]{LoggedUsersContract.UserMessages.nicknameSender,LoggedUsersContract.UserMessages.message,LoggedUsersContract.UserMessages.date},
+                        LoggedUsersContract.UserMessages.nicknameReceiver + "=" + "\'" + nickname + "\'",
+                        null,
+                        LoggedUsersContract.UserMessages.nicknameSender,
+                        "Max(" + LoggedUsersContract.UserMessages.date +")",null);
                 while(cursor.moveToNext()){
-                    Log.d("SomeInfo:",cursor.getString(0));
+                    lastCachedMessages.put(cursor.getString(0),
+                            new CommonClasses.Message(cursor.getString(0),nickname,
+                                    cursor.getString(1),cursor.getString(2)));
                 }
-                cursor.close();
+                isPrepared = true;
             }
-            }).start();
-        }
+        }).start();
 
-        private class BlackHandler extends Handler{
-        BlackHandler(Looper looper){
+        //should be used instead of switchCurrentUser();
+        //instead of just initializing user it would also initialize observerList
+    }
+
+    public NotifiableDataArray<String,CommonClasses.Message> getNotifiableDataArray(){
+        notifiableDataArray = new NotifiableDataArray<String,CommonClasses.Message>(dialogueHandler);
+        mutatorOfNotifiableDataArray = notifiableDataArray.getMutator();
+        return notifiableDataArray;
+    }
+
+    public void startDialogueSystem(){
+        mutatorOfNotifiableDataArray.setTreeMap(lastCachedMessages);
+        if(!isOnline){
+            establishConnection(ngrokHost,port);
+        }
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    int tries = 0;
+                    while (!isOnline && tries < 50) {
+                        Thread.sleep(100);
+                        tries++;
+                    }
+                    if(isOnline){
+                        Calendar calendar = Calendar.getInstance();
+                        calendar.set(0,0,0,0,0,0);
+                        serverOutputStream.writeObject(new RequestMessagesQuery(currentUser.connectionKey,currentUser.nickname,
+                                calendar));
+                        serverOutputStream.flush();
+                    }else{
+                        Log.d("Dialogue system","Info could not be gotten:connection lost");
+                    }
+                }catch (IOException | InterruptedException e){
+                    Log.d("Dialogue system","Info could not be gotten:connection lost");
+                }
+            }
+        }).start();
+    }
+
+    public void clearDialogueResources(){
+
+    }
+
+
+
+
+    private void addMessageToDB(CommonClasses.Message message){
+        cachedUsersDB.execSQL("INSERT INTO " + LoggedUsersContract.UserMessages.tableName + " VALUES (\'" +
+                message.sender + "\'," + "\'" + message.receiver + "\'," + "\'" +
+                message.getDate() +"\'," + "\''" + message.message +"\');");
+    }
+
+//_______________________________________________Helper classes______________________________________________________________
+
+        private class AuthorisationHandler extends Handler{
+        AuthorisationHandler(Looper looper){
             super(looper);
         }
             @Override
             public void handleMessage(Message msg) {
                 ((RunnableWithCommentary)msg.obj).runnable.run();
                 Toast.makeText(appContext,((RunnableWithCommentary)msg.obj).commentary,Toast.LENGTH_LONG).show();
+            }
+        }
 
+        private class DialogueHandler extends Handler{
+        DialogueHandler(Looper looper){
+            super(looper);
+        }
+            @Override
+            public void handleMessage(Message msg) {
+                ((Runnable)msg.obj).run();
             }
         }
 

@@ -51,7 +51,7 @@ public class AuthorisedAdapter extends RecyclerView.Adapter {
         viewHolder.textView.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                bigBlackBox.switchCurrentUser(((TextView)v).getText().toString());
+                bigBlackBox.prepareDialogSystem(((TextView)v).getText().toString());
                 Intent intent = new Intent(context,DialogActivity.class);
                 context.startActivity(intent);
             }

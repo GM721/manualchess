@@ -20,6 +20,7 @@ public class SQLiteCachedUsers extends SQLiteOpenHelper {
     @Override
     public void onCreate(SQLiteDatabase db) {
         db.execSQL(LoggedUsersContract.LoggedUsers.SQLCreateDB); //TODO Реализовать выполнение в отдельном потоке!!!
+        db.execSQL(LoggedUsersContract.UserMessages.SQLCreateDB);
     }
 
     @Override

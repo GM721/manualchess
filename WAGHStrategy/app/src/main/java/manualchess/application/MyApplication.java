@@ -7,7 +7,6 @@ public class MyApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
-        bigBlackBox = BigBlackBox.getBigBlackBox(this,"0.tcp.ngrok.io",19642);
+        bigBlackBox = BigBlackBox.getBigBlackBox(this,"0.tcp.ngrok.io",10276);
     }
-
 }

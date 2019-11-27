@@ -32,7 +32,6 @@ public class MainActivity extends AppCompatActivity {
 
         Button regButton = findViewById(R.id.regButton);
         Button authButton = findViewById(R.id.authButton);
-
         regButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {

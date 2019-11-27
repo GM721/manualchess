@@ -9,8 +9,14 @@ import android.widget.ImageView;
 import android.widget.PopupMenu;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.waghstrategy.R;
+
+import UtilClasses.NotifiableDataArray;
+import manualchess.application.Adapters.AuthorisedAdapter;
+import manualchess.application.Adapters.DialogueAdapter;
 
 public class DialogActivity extends AppCompatActivity {
 
@@ -18,6 +24,8 @@ public class DialogActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_dialog);
+        final BigBlackBox bbb = ((MyApplication) getApplication()).bigBlackBox;
+        NotifiableDataArray<String,CommonClasses.Message> notifiableDataArray = bbb.getNotifiableDataArray();
 //_____________________________________________________MENU_________________________________________________________
 
 
@@ -27,7 +35,6 @@ public class DialogActivity extends AppCompatActivity {
         popupMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
             @Override
             public boolean onMenuItemClick(MenuItem item) {
-                BigBlackBox bbb = ((MyApplication) getApplication()).bigBlackBox;
                 if(item.getTitle().toString().equals("Refresh connection")){
                     Log.d("Refreshed","refreshed");
                     //bbb.establishConnection(bbb.ngrokHost,bbb.port);
@@ -61,6 +68,11 @@ public class DialogActivity extends AppCompatActivity {
             }
         });
 //______________________________________________ADAPTER_____________________________________________________________
+        final RecyclerView recyclerView = findViewById(R.id.messageRecyclerView);
+        recyclerView.setAdapter(new DialogueAdapter(bbb.getNotifiableDataArray()));
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        bbb.startDialogueSystem();
+
 
     }
 }
