@@ -15,7 +15,7 @@ public class MessageSender
 	{
 		if (onlineUsers.containsKey(message.collocutor))
 		{
-			MessageAnswer ans = new MessageAnswer(true, "new message", message, new Date());
+			MessageAnswer ans = new MessageAnswer(true, "new message", message, CommonClasses.Calendar.getInstance());
 			onlineUsers.get(message.collocutor).writeObject(ans);
 		}
 	}
