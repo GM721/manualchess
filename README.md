@@ -1,3 +1,2 @@
 # manualchess
-Strategic game
-
+messenger with dice rolls!
