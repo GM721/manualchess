@@ -1,43 +1,42 @@
 package UtilClasses;
 
 import android.os.Handler;
+import android.util.Log;
 
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.TreeMap;
 
-import CommonClasses.Message;
-
-public class NotifiableDataArray<K,V> {
+public class NotifiableTreeMap<K,V> {
 
     private TreeMap<K,V> treeMap;
     private Handler handler;
     private Runnable onTreeMapSetAction;
-    private Runnable onTreeMapInsertAction;
-    private Runnable onElementChangedAction;
-    private MutatorOfNotifiableDataArray<K,V> mutator = null;
+    private RunnableWithResource onTreeMapInsertAction;
+    private RunnableWithResource onElementChangedAction;
+    private MutatorOfNotifiableTreeMap<K,V> mutator = null;
 
-    public NotifiableDataArray(Handler handler){
+    public NotifiableTreeMap(Handler handler){
         this.handler = handler;
     }
 
-    public NotifiableDataArray(Handler handler, TreeMap<K,V> treeMap, Runnable onTreeMapSetAction){
+    public NotifiableTreeMap(Handler handler, TreeMap<K,V> treeMap, Runnable onTreeMapSetAction){
         this.handler = handler;
         this.treeMap = treeMap;
         this.onTreeMapSetAction = onTreeMapSetAction;
     }
 
-    public NotifiableDataArray(Handler handler, TreeMap<K,V> treeMap,
-                               Runnable onTreeMapSetAction, Runnable onTreeMapInsertAction){
+    public NotifiableTreeMap(Handler handler, TreeMap<K,V> treeMap,
+                             Runnable onTreeMapSetAction, RunnableWithResource onTreeMapInsertAction){
         this.handler = handler;
         this.treeMap = treeMap;
         this.onTreeMapSetAction = onTreeMapSetAction;
         this.onTreeMapInsertAction = onTreeMapInsertAction;
     }
 
-    public MutatorOfNotifiableDataArray<K,V> getMutator(){
+    public MutatorOfNotifiableTreeMap<K,V> getMutator(){
         if(mutator==null){
-            mutator = new MutatorOfNotifiableDataArray<K,V>(this);
+            mutator = new MutatorOfNotifiableTreeMap<K,V>(this);
         }else{
             throw new RuntimeException("Mutator already exists, maybe it is created not only by you?");
         }
@@ -48,23 +47,23 @@ public class NotifiableDataArray<K,V> {
         handler.obtainMessage(0, onTreeMapSetAction).sendToTarget();
     }
 
-    private void onArrayInsert(){
-        handler.obtainMessage(0, onTreeMapInsertAction).sendToTarget();
+    private void onArrayInsert(int element){
+        handler.obtainMessage(10,new Pair<RunnableWithResource,Integer>(onTreeMapInsertAction,element)).sendToTarget();
     }
 
-    private void onElementChanged(){
-        handler.obtainMessage(0,onElementChangedAction).sendToTarget();
+    private void onElementChanged(int element){
+        handler.obtainMessage(10,new Pair<RunnableWithResource,Integer>(onElementChangedAction,element)).sendToTarget();
     }
 
     public void setOnTreeMapSetAction(Runnable onTreeMapSetAction){
         this.onTreeMapSetAction = onTreeMapSetAction;
     }
 
-    public void setOnTreeMapInsertAction(Runnable onTreeMapInsertAction){
+    public void setOnTreeMapInsertAction(RunnableWithResource onTreeMapInsertAction){
         this.onTreeMapInsertAction = onTreeMapInsertAction;
     }
 
-    public void setOnElementChangedAction(Runnable onElementChangedAction){
+    public void setOnElementChangedAction(RunnableWithResource onElementChangedAction){
         this.onElementChangedAction = onElementChangedAction;
     }
 
@@ -75,12 +74,19 @@ public class NotifiableDataArray<K,V> {
 
     void addOrChangeItem(K key,V value){
         if (this.treeMap.containsKey(key)){
-            treeMap.put(key,value);
-            onElementChanged();
+            treeMap.put(key, value);
+            Iterator<K> iterator = treeMap.keySet().iterator();
+            int i=0;
+            Log.d("Right before cycle","Cycle");
+            while(!iterator.next().equals(key)){
+                Log.d("Right in cycle","Cycle");
+                i++;
+            }
+            onElementChanged(i);
         }
         else {
             treeMap.put(key,value);
-            onArrayInsert();
+            onArrayInsert(treeMap.size()-1);
         }
     }
 
@@ -102,12 +108,18 @@ public class NotifiableDataArray<K,V> {
 
 
     public int getSize(){
-        return treeMap.size();
+        if(treeMap!=null) {
+            return treeMap.size();
+        }else return -1;
     }
 
     public ArrayList<V> getArrayList(){
         ArrayList<V> arrayList = new ArrayList<V>(this.treeMap.values());
         return arrayList;
+    }
+
+    public boolean containsKey(K key){
+        return treeMap.containsKey(key);
     }
 
 
