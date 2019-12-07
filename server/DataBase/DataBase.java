@@ -117,10 +117,9 @@ public class DataBase
 	public java.util.Date addMessage(MessageQuery message) throws SQLException, IOException {
 		Statement stmt = conn.createStatement();
 		String time= new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
-		//Date time = new Date();
 		stmt.executeUpdate("INSERT INTO messages (sender,receiver, date, message) VALUES ('"+ message.nickname +"','"+ message.collocutor +"','"+time +"','"+ message.message +"');");
 		ResultSet rs = stmt.executeQuery("SELECT date FROM messages WHERE sender  = '" + message.nickname+"' AND  receiver = '" + message.collocutor+ "' AND date = '"+time+"' ;");
-		MessageSender.send(message);
+		//MessageSender.send(message);
 		if( rs.next()) {
 			java.util.Date re = rs.getDate("date");
 			rs.close();

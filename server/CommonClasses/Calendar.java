@@ -6,30 +6,39 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 
 public class Calendar implements Serializable {
-    private static final long serialVersionUID = 13;
-    public int year;
-    int month;
-    int day;
-    int hour;
-    int minute;
-    int second;
-    public static final int YEAR = 1;
-    public static final int MONTH = 2;
-    public static final int DAY_OF_MONTH = 3;
-    public static final int HOUR = 4;
-    public static final int MINUTE = 5;
-    public static final int SECOND = 6;
+	private static final long serialVersionUID = 13;
+	public int year;
+	int month;
+	int day;
+	int hour;
+	int minute;
+	int second;
+	public static final int YEAR = 1;
+	public static final int MONTH = 2;
+	public static final int DAY_OF_MONTH = 3;
+	public static final int HOUR = 4;
+	public static final int MINUTE = 5;
+	public static final int SECOND = 6;
 
-    public static Calendar getInstance(){
-        Calendar calendar = new Calendar();
-        calendar.year=0;
-        calendar.month=0;
-        calendar.day=0;
-        calendar.hour=0;
-        calendar.minute=0;
-        calendar.second=0;
-        return calendar;
-    }
+	public static Calendar getInstance(){
+		Calendar calendar = new Calendar();
+		calendar.year=0;
+		calendar.month=0;
+		calendar.day=0;
+		calendar.hour=0;
+		calendar.minute=0;
+		calendar.second=0;
+		return calendar;
+	}
+	public String toString(){
+		String year = this.get(Calendar.YEAR)<1000 ? "0" + this.get(Calendar.YEAR) : Integer.toString(this.get(Calendar.YEAR));
+		String month = this.get(Calendar.MONTH)<10 ? "0"+this.get(Calendar.MONTH) : Integer.toString(this.get(Calendar.MONTH));
+		String day = this.get(Calendar.DAY_OF_MONTH)<10 ? "0"+this.get(Calendar.DAY_OF_MONTH) : Integer.toString(this.get(Calendar.DAY_OF_MONTH));
+		String hour = this.get(Calendar.HOUR)<10 ? "0"+this.get(Calendar.HOUR) : Integer.toString(this.get(Calendar.HOUR));
+		String minute = this.get(Calendar.MINUTE)<10 ? "0"+this.get(Calendar.MINUTE) : Integer.toString(this.get(Calendar.MINUTE));
+		String second = this.get(Calendar.SECOND)<10 ? "0"+this.get(Calendar.SECOND) : Integer.toString(this.get(Calendar.SECOND));
+		return year+"-"+month+"-"+day+" "+hour+":"+minute+":"+second;
+	}
     public static Calendar fromDate(java.util.Date date)
     {
 	    LocalDate localDate = date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();

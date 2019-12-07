@@ -6,8 +6,8 @@ import java.io.*;
 
 public class MessageSender
 {
-	static Map<String, ObjectOutputStream> onlineUsers;
-	public MessageSender(Map<String, ObjectOutputStream> onlineUsers)
+	static Map<String, Pair<ObjectOutputStream, ObjectInputStream>> onlineUsers;
+	public MessageSender(Map<String, Pair<ObjectOutputStream, ObjectInputStream>> onlineUsers)
 	{
 		this.onlineUsers = onlineUsers;
 	}
@@ -15,8 +15,11 @@ public class MessageSender
 	{
 		if (onlineUsers.containsKey(message.collocutor))
 		{
-			MessageAnswer ans = new MessageAnswer(true, "new message", message, CommonClasses.Calendar.getInstance());
-			onlineUsers.get(message.collocutor).writeObject(ans);
+			System.out.println("YES");
+			CommonClasses.Calendar cal = CommonClasses.Calendar.fromDate(new Date());
+			System.out.println(cal);
+			MessageAnswer ans = new MessageAnswer(true, "new message", message, /*CommonClasses.Calendar.fromDate(new Date())*/cal);
+			onlineUsers.get(message.collocutor).getValue0().writeObject(ans);
 		}
 	}
 }
