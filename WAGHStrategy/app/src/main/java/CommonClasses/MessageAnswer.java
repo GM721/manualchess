@@ -1,6 +1,6 @@
 package CommonClasses;
 
-import java.util.Calendar;
+import CommonClasses.Calendar;
 import java.util.Date;
 
 public class MessageAnswer extends Answer {

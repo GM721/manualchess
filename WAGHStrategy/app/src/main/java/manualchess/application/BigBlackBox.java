@@ -2,6 +2,7 @@ package manualchess.application;
 
 import android.content.Context;
 import android.database.Cursor;
+import android.database.sqlite.SQLiteConstraintException;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.Handler;
 import android.os.Looper;
@@ -17,23 +18,34 @@ import java.io.StreamCorruptedException;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.Calendar;
+import CommonClasses.Calendar;
 import java.util.TreeMap;
 
 import CommonClasses.Answer;
 import CommonClasses.AuthorisationAnswer;
+import CommonClasses.CollocutorAnswer;
+import CommonClasses.CollocutorQuery;
+import CommonClasses.DiceAnswer;
 import CommonClasses.MessageAnswer;
+import CommonClasses.MessageQuery;
 import CommonClasses.MessagesAnswer;
 import CommonClasses.PlayerAuthorise;
 import CommonClasses.PlayerRegister;
 import CommonClasses.Query;
 import CommonClasses.RequestMessagesQuery;
+import CommonClasses.StartBattleQuery;
+import CommonClasses.StartBattleRequest;
 import CommonClasses.User;
-import UtilClasses.MutatorOfNotifiableDataArray;
-import UtilClasses.NotifiableDataArray;
+import UtilClasses.MutatorOfNotifiableArrayList;
+import UtilClasses.MutatorOfNotifiableTreeMap;
+import UtilClasses.NotifiableArrayList;
+import UtilClasses.NotifiableTreeMap;
+import UtilClasses.Pair;
+import UtilClasses.RunnableWithResource;
 
 public class BigBlackBox{
-
+//TODO когда выходишь на главный экран,почему-то продолжаешь принимать сообщения,иначе говоря,на stopGettingMessages надо
+//TODO прекратить получать сообщения
     private boolean isOnline = false;
     private boolean isEstablishing = false;
     private boolean isAuthorising = false;
@@ -48,10 +60,15 @@ public class BigBlackBox{
     private AuthorisationHandler authHandler;
     private DialogueHandler dialogueHandler;
     private Pair<Runnable,Runnable> SucessAndFailRunnables;
+    private Pair<RunnableWithResource<Integer>,RunnableWithResource<String>> diceResultRunnables;
+    private RunnableWithResource<String> diceRequestRunnable;
     private Context appContext;
     private TreeMap<String,CommonClasses.Message> lastCachedMessages;
-    private NotifiableDataArray<String,CommonClasses.Message> notifiableDataArray;
-    private MutatorOfNotifiableDataArray<String,CommonClasses.Message> mutatorOfNotifiableDataArray;
+    private ArrayList<CommonClasses.Message> cachedCollocation;
+    private NotifiableTreeMap<String,CommonClasses.Message> notifiableLastMessages;
+    private NotifiableArrayList<CommonClasses.Message> notifiableCollocation;
+    private MutatorOfNotifiableTreeMap<String,CommonClasses.Message> mutatorOfNotifiableTreeMap;
+    private MutatorOfNotifiableArrayList<CommonClasses.Message> mutatorOfNotifiableCollocation;
     private TreeMap<String,Pair<Runnable,Runnable>> runnableStorage;
 
 
@@ -155,6 +172,10 @@ public class BigBlackBox{
                                 isOnline = false;
                                 isEstablishing = false;
                                 isAuthorising = false;
+                                for (String s:runnableStorage.keySet()) {
+                                    runnableStorage.put(s,null);
+                                }
+                                diceResultRunnables =null;
                             }
                         }
                     }
@@ -164,7 +185,8 @@ public class BigBlackBox{
             Log.d("Connection","Already establishing or online");
         }
     }
-
+//При деавторизации и последующей авторизации происходит дублирование диалогов
+//При нажатии кнопки назад и при log out не происходит отправки запросов на остановку получения сообщений
     private void proceedAnswer(Answer answer){
         if(answer==null){
             Log.d("Answer","NoResponseYet");
@@ -212,7 +234,7 @@ public class BigBlackBox{
                         answer.description)).sendToTarget();
                 failure.run();
             }
-        }else if(answer.operation.equals("message array")){
+        }else if(answer.operation.equals("startGettingMessages")){
             if(answer.isOk) {
                 MessagesAnswer messagesAnswer = (MessagesAnswer) answer;
                 ArrayList<CommonClasses.Message> messages = messagesAnswer.messages;
@@ -227,15 +249,59 @@ public class BigBlackBox{
                 MessageAnswer messageAnswer = (MessageAnswer) answer;
                 addMessageToDB(new CommonClasses.Message(messageAnswer));
                 Log.d("Message_ok","Received");
-                Log.d("Message_ok","Is this earlier:" +
-                        mutatorOfNotifiableDataArray.getData(currentUser.nickname).date.before(messageAnswer.date));
-                if(!messageAnswer.sender.equals(currentUser.nickname) &&
-                mutatorOfNotifiableDataArray.getData(currentUser.nickname).date.before(messageAnswer.date)) {
-                    mutatorOfNotifiableDataArray.addOrChangeItem(messageAnswer.sender,new CommonClasses.Message(messageAnswer));
-                }
             }
             else{
                 Log.d("Message",answer.description);
+            }
+        }else if(answer.operation.equals("collocation")){
+            if(answer.isOk){
+                Log.d("Collocation","isOk");
+                Message message = dialogueHandler.obtainMessage(0,runnableStorage.get("Collocutor search").firstObj);
+                currentCollocutor = ((CollocutorAnswer) answer).collocutor;
+                message.sendToTarget();
+                runnableStorage.put("Collocutor search",null);
+            }else{
+                Message message = dialogueHandler.obtainMessage(-5,
+                        new Pair<Runnable,String> (runnableStorage.get("Collocutor search").secondObj,answer.description));
+                message.sendToTarget();
+                runnableStorage.put("Collocutor search",null);
+            }
+        }else if(answer.operation.equals("startBattle")){
+            Log.d("Start battle","received");
+            if(answer.isOk){
+                StartBattleRequest startBattleRequest = (StartBattleRequest) answer;
+                Log.d("Start battle","is ok");
+                if(diceResultRunnables==null) {
+                    Log.d("Dice result","is null");
+                    dialogueHandler.obtainMessage(21,
+                            new Pair<RunnableWithResource<String>, String>(diceRequestRunnable,
+                                    startBattleRequest.collocutor)).sendToTarget();
+                }else{
+                    try {
+                        serverOutputStream.writeObject(new StartBattleQuery(currentUser.connectionKey,
+                                currentUser.nickname, startBattleRequest.collocutor,
+                                false,"battleResponse"));
+                    }catch (IOException e){
+                        e.printStackTrace();
+                    }
+                }
+            }else{
+                Log.d("Start battle","request received, but something went wrong on the server side");
+            }
+        }else if(answer.operation.equals("diceRoll")){
+            Log.d("Dice roll","received");
+            DiceAnswer diceAnswer = (DiceAnswer) answer;
+            if(answer.isOk){
+                Log.d("Dice roll","ok");
+                dialogueHandler.obtainMessage(20,new Pair<RunnableWithResource<Integer>,Pair<Integer,Integer>>(
+                        diceResultRunnables.firstObj,new Pair<Integer, Integer>(diceAnswer.userResult,diceAnswer.collocutorResult)
+                )).sendToTarget();
+                diceResultRunnables = null;
+            }else{
+                Log.d("Dice roll",diceAnswer.description);
+                dialogueHandler.obtainMessage(-10,new Pair<RunnableWithResource<String>,String>(
+                        diceResultRunnables.secondObj,diceAnswer.description)).sendToTarget();
+                diceResultRunnables = null;
             }
         }
         else{
@@ -246,14 +312,14 @@ public class BigBlackBox{
     public void requestRegisterUser(final PlayerRegister playerRegister, final Runnable onSucessfullAction,
                                     final Runnable onFailedAction) {
         if (!isAuthorising) {
-            establishConnection(ngrokHost,port);
+            if(!isOnline) establishConnection(ngrokHost,port);
             new Thread(new Runnable() {
                 @Override
                 public void run() {
                     try {
                         isAuthorising = true;
                         int tries = 0;
-                        while (!isOnline && tries < 50) {
+                        while (!isOnline && tries < 20) {
                             Thread.sleep(100);
                             Log.d("ConnectionWait", "Waiting for connection establishment");
                             tries++;
@@ -297,7 +363,7 @@ public class BigBlackBox{
                         try {
                             isAuthorising = true;
                             int tries = 0;
-                            while (!isOnline && tries < 50) {
+                            while (!isOnline && tries < 20) {
                                 Thread.sleep(100);
                                 Log.d("ConnectionWait", "Waiting for connection establishment");
                                 tries++;
@@ -310,16 +376,19 @@ public class BigBlackBox{
                                 Log.d("Connection", "Authorise requested without connection");
                                 authHandler.obtainMessage(CONNECTIONERROR,
                                         new RunnableWithCommentary(onFailedAction, CONNECTIONERRORCOMMENTARY)).sendToTarget();
+                                isAuthorising=false;
                             }
                         } catch (InterruptedException | IOException ie) {
                             authHandler.obtainMessage(CONNECTIONERROR,
                                     new RunnableWithCommentary(onFailedAction, CONNECTIONERRORCOMMENTARY)).sendToTarget();
                             ie.printStackTrace();
+                            isAuthorising=false;
                         }
                     } else{
                         prepareDialogSystem(playerAuthorise.nickname);
                         authHandler.obtainMessage(AUTHORISE,
                                 new RunnableWithCommentary(onSucessfullAction,"someinfo"));
+                        isAuthorising=false;
                     }
                 }
             }).start();
@@ -340,7 +409,7 @@ public class BigBlackBox{
                     runnableStorage.put("exit", new Pair<Runnable, Runnable>(null, null));
                     try {
                         int tries = 0;
-                        while (!isOnline && tries < 50) {
+                        while (!isOnline && tries < 20) {
                             Thread.sleep(100);
                             tries++;
                         }
@@ -386,16 +455,21 @@ public class BigBlackBox{
 
     private void cacheUser(final AuthorisationAnswer authAnswer){
         Log.d("Answer",authAnswer.nickname);
+        Calendar calendar = Calendar.getInstance();
+        calendar.set(1000,0,0,0,0,0);
         cachedUsersDB.execSQL("INSERT INTO " + LoggedUsersContract.LoggedUsers.tableName +
-                " VALUES (\'" +  authAnswer.nickname +"\', \'" + authAnswer.connectionKey + "\');");
+                " VALUES (\'" +  authAnswer.nickname +"\', \'" + authAnswer.connectionKey + "\',\'" +
+                calendar.toString()+"\');");
         prepareDialogSystem(authAnswer.nickname);
     }
 
     private void unauthoriseUser(String nickname){
         cachedUsersDB.execSQL("DELETE FROM " + LoggedUsersContract.LoggedUsers.tableName + " WHERE "+
                 LoggedUsersContract.LoggedUsers.nickname+"="+"'"+nickname+"'");
+        cachedUsersDB.execSQL("DELETE FROM " + LoggedUsersContract.UserMessages.tableName + " WHERE "+
+                LoggedUsersContract.UserMessages.nicknameSender+"="+"'"+nickname+"'");
         Log.d("UnauthAnswer","Unauthorisation completed");
-        currentUser=null;//TODO nullate all observers
+        currentUser=null;
     }
 
     private boolean isAuthorised(String nickname){
@@ -403,8 +477,12 @@ public class BigBlackBox{
                 new String[]{LoggedUsersContract.LoggedUsers.nickname,LoggedUsersContract.LoggedUsers.connectionKey},
                 LoggedUsersContract.LoggedUsers.nickname + "=" + "'" + nickname + "'",null,null,
                 null,null);
-        if(cursor.getCount()==0) return false;
+        if(cursor.getCount()==0){
+            cursor.close();
+            return false;
+        }
         else {
+            cursor.close();
             return true;
         }
     }
@@ -419,15 +497,14 @@ public class BigBlackBox{
         while(cursor.moveToNext()){
             cachedUsers.add(cursor.getString(0));
         }
+        cursor.close();
         return cachedUsers.toArray(new String[cachedUsers.size()]);
     }
 
-//_______________________________________________Database methods____________________________________________________________
+//____________________________________________Dialogue and collocation methods____________________________________________________________
 
-    public void prepareDialogSystem(final String nickname){
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
+    public void prepareDialogSystem(final String nickname){//TODO place in secondary thread
+
                 lastCachedMessages = new TreeMap<String, CommonClasses.Message>();
                 Cursor cursor = cachedUsersDB.query(LoggedUsersContract.LoggedUsers.tableName,
                         new String[]{LoggedUsersContract.LoggedUsers.connectionKey},
@@ -446,22 +523,64 @@ public class BigBlackBox{
                             new CommonClasses.Message(cursor.getString(0),nickname,
                                     cursor.getString(1),cursor.getString(2)));
                 }
+                cursor.close();
+                cursor = cachedUsersDB.query(LoggedUsersContract.UserMessages.tableName,
+                        new String[]{LoggedUsersContract.UserMessages.nicknameReceiver,
+                                LoggedUsersContract.UserMessages.message,LoggedUsersContract.UserMessages.date},
+                        LoggedUsersContract.UserMessages.nicknameSender + "=" + "\'" + nickname +"\'",
+                        null,LoggedUsersContract.UserMessages.nicknameReceiver,
+                                "MAX(" + LoggedUsersContract.UserMessages.date +")",null);
+                while(cursor.moveToNext()){
+                    if(!lastCachedMessages.containsKey(cursor.getString(0))) {
+                        lastCachedMessages.put(cursor.getString(0),
+                                new CommonClasses.Message(cursor.getString(0), nickname,
+                                        "This user hasn't replied yet", "1000-00-00 00:00:00"));
+                    }
+                    //It is normal that receiver is places as a sender here:this message wil be shown only,so
+                    //at the UI side it will look as message to this user sent, but user hasn't replied yet
+                }
                 isPrepared = true;
-            }
-        }).start();
 
         //should be used instead of switchCurrentUser();
         //instead of just initializing user it would also initialize observerList
     }
 
-    public NotifiableDataArray<String,CommonClasses.Message> getNotifiableDataArray(){
-        notifiableDataArray = new NotifiableDataArray<String,CommonClasses.Message>(dialogueHandler);
-        mutatorOfNotifiableDataArray = notifiableDataArray.getMutator();
-        return notifiableDataArray;
+    public void prepareCollocationSystem(){ //TODO place in secondary thread
+        cachedCollocation = new ArrayList<CommonClasses.Message>();
+        Cursor cursor = cachedUsersDB.query(LoggedUsersContract.UserMessages.tableName,
+                new String[]{LoggedUsersContract.UserMessages.nicknameSender,
+                        LoggedUsersContract.UserMessages.nicknameReceiver,LoggedUsersContract.UserMessages.message,
+                LoggedUsersContract.UserMessages.date},
+                "(" + LoggedUsersContract.UserMessages.nicknameSender +"="+"\'" + currentCollocutor +"\'" + " AND "
+                        + LoggedUsersContract.UserMessages.nicknameReceiver + "=" +"\'" + currentUser.nickname+"\'" +")"
+                +" OR (" + LoggedUsersContract.UserMessages.nicknameReceiver+"="+"\'"+currentCollocutor+"\'" +
+                " AND " + LoggedUsersContract.UserMessages.nicknameSender+"="+"\'"+currentUser.nickname+"\')",
+                null,null,null,
+                LoggedUsersContract.UserMessages.date);
+        Log.d("Prepare","collocation");
+        while(cursor.moveToNext()){
+            Log.d("Prepare","while");
+            Log.d("Date",cursor.getString(3));
+            cachedCollocation.add(new CommonClasses.Message(cursor.getString(0),
+                    cursor.getString(1),cursor.getString(2),cursor.getString(3)));
+        }
+        Log.d("Prepare","cursor ended");
+    }
+
+    public NotifiableTreeMap<String,CommonClasses.Message> getNotifiableLastMessages(){
+        notifiableLastMessages = new NotifiableTreeMap<String,CommonClasses.Message>(dialogueHandler);
+        mutatorOfNotifiableTreeMap = notifiableLastMessages.getMutator();
+        return notifiableLastMessages;
+    }
+
+    public NotifiableArrayList<CommonClasses.Message> getNotifiableCollocation(){
+        notifiableCollocation = new NotifiableArrayList<CommonClasses.Message>(dialogueHandler);
+        mutatorOfNotifiableCollocation = notifiableCollocation.getMutator();
+        return notifiableCollocation;
     }
 
     public void startDialogueSystem(){
-        mutatorOfNotifiableDataArray.setTreeMap(lastCachedMessages);
+        mutatorOfNotifiableTreeMap.setTreeMap(lastCachedMessages);
         if(!isOnline){
             establishConnection(ngrokHost,port);
         }
@@ -470,16 +589,22 @@ public class BigBlackBox{
             public void run() {
                 try {
                     int tries = 0;
-                    while (!isOnline && tries < 50) {
+                    while (!isOnline && tries < 20) {
                         Thread.sleep(100);
                         tries++;
                     }
                     if(isOnline){
-                        Calendar calendar = Calendar.getInstance();
-                        calendar.set(0,0,0,0,0,0);
+                        Cursor cursor = cachedUsersDB.query(LoggedUsersContract.LoggedUsers.tableName,
+                                new String[]{LoggedUsersContract.LoggedUsers.date},
+                                LoggedUsersContract.LoggedUsers.nickname + " = " + "\'" + currentUser.nickname +"\'",
+                                null,null,null,null);
+                        cursor.moveToNext();
+                        Calendar calendar = Calendar.getInstance(cursor.getString(0));
+                        Log.d("Date:",cursor.getString(0));
                         serverOutputStream.writeObject(new RequestMessagesQuery(currentUser.connectionKey,currentUser.nickname,
                                 calendar));
                         serverOutputStream.flush();
+                        cursor.close();
                     }else{
                         Log.d("Dialogue system","Info could not be gotten:connection lost");
                     }
@@ -490,18 +615,225 @@ public class BigBlackBox{
         }).start();
     }
 
-    public void clearDialogueResources(){
-
+    public void startCollocationSystem(){
+        mutatorOfNotifiableCollocation.set(cachedCollocation);
     }
 
-
-
-
-    private void addMessageToDB(CommonClasses.Message message){
-        cachedUsersDB.execSQL("INSERT INTO " + LoggedUsersContract.UserMessages.tableName + " VALUES (\'" +
-                message.sender + "\'," + "\'" + message.receiver + "\'," + "\'" +
-                message.getDate() +"\'," + "\''" + message.message +"\');");
+    public void leaveDialogSystem(){
+        if(!isOnline) establishConnection(ngrokHost,port);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    int tries=0;
+                    while(tries<20 && !isOnline){
+                        tries++;
+                        Thread.sleep(100);
+                    }
+                    if(!isOnline) {
+                        serverOutputStream.writeObject(new Query(currentUser.connectionKey, currentUser.nickname, "stopGettingMessages"));
+                        Log.d("Try","succesfull");
+                        currentUser=null;
+                        mutatorOfNotifiableTreeMap.setTreeMap(null);
+                        for (String s:runnableStorage.keySet()) {
+                            runnableStorage.put(s,null);
+                        }
+                        diceResultRunnables = null;
+                    }
+                }catch (IOException |InterruptedException e){
+                    e.printStackTrace();
+                    Log.d("Leave dialog system","action failed");
+                }
+            }
+        }).start();
     }
+
+    public void searchCollocutor(final String collocutor, final Runnable onSuccess, final Runnable onFault){
+        if(!isOnline) establishConnection(ngrokHost,port);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    int tries = 0;
+                    while (!isOnline && tries < 20) {
+                        tries++;
+                        Thread.sleep(100);
+                    }
+                    if(isOnline && runnableStorage.get("Collocutor search")==null){
+                        runnableStorage.put("Collocutor search",new Pair<Runnable, Runnable>(onSuccess,onFault));
+                        CollocutorQuery collocutorQuery = new CollocutorQuery(currentUser.connectionKey,
+                                currentUser.nickname,collocutor);
+                        serverOutputStream.writeObject(collocutorQuery);
+                    }else{
+                        if(!isOnline) {
+                            Log.d("searchCollocutor", "Connection lost");
+                            dialogueHandler.obtainMessage(-5,
+                                    new Pair<Runnable,String>(onFault,"Connection lost")).sendToTarget();
+                            runnableStorage.put("Collocutor search",null);
+                        }
+                        if(runnableStorage.get("Collocutor search")!=null){
+                            Log.d("searchCollocutor","collocutor already in search");
+                            dialogueHandler.obtainMessage(-5,
+                                    new Pair<Runnable,String>(onFault,"Collocutor already in search")).sendToTarget();
+                        }
+                    }
+                }catch (InterruptedException | IOException e){
+                    Log.d("Connection","Connection lost");
+                    dialogueHandler.obtainMessage(-5,
+                            new Pair<Runnable,String>(onFault,"Connection lost")).sendToTarget();
+                    runnableStorage.put("Collocutor search",null);
+                    e.printStackTrace();
+                }
+            }
+        }).start();
+    }
+
+    public void sendMessage(final String message, final Runnable onFailure){
+        if(!isOnline) establishConnection(ngrokHost,port);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try{
+                int tries=0;
+                while(!isOnline && tries<20){
+                    Thread.sleep(100);
+                    tries++;
+                }
+                if(isOnline){
+                    Log.d("Message",message);
+                    Log.d("Message",currentUser.nickname);
+                    Log.d("Message",Integer.toString(currentUser.connectionKey));
+                    serverOutputStream.writeObject(new MessageQuery(currentUser.connectionKey,currentUser.nickname,
+                            currentCollocutor,message));
+                    Log.d("Message","sent");
+                }else{
+                    Log.d("Connection","Lost");
+                    dialogueHandler.obtainMessage(-5,
+                            new Pair<Runnable,String>(onFailure,"Connection lost")).sendToTarget();
+                }
+            }catch (InterruptedException | IOException e){
+                    Log.d("Connection","lost");
+                    dialogueHandler.obtainMessage(-5,
+                            new Pair<Runnable,String>(onFailure,"Connection lost")).sendToTarget();
+                }
+            }
+        }).start();
+    }
+
+    public void clearCollocationResources(){
+        currentCollocutor=null;
+        mutatorOfNotifiableCollocation.set(null);
+    }
+
+    private void addMessageToDB(CommonClasses.Message message){//TODO place in thread
+        try {
+            cachedUsersDB.execSQL("INSERT INTO " + LoggedUsersContract.UserMessages.tableName + " VALUES (\'" +
+                    message.sender + "\'," + "\'" + message.receiver + "\'," + "\'" +
+                    message.getDate() + "\'," + "\'" + message.message + "\');");
+            cachedUsersDB.execSQL("UPDATE "+LoggedUsersContract.LoggedUsers.tableName + " SET " +
+                LoggedUsersContract.LoggedUsers.date + " = " + "\'"+message.date.toString() +"\'" + " WHERE " +
+                LoggedUsersContract.LoggedUsers.nickname + " = " + "\'" + message.receiver +"\'" +
+                    " OR " + LoggedUsersContract.LoggedUsers.nickname + " = " + "\'" + message.sender + "\';");
+        Log.d("Current user",Boolean.toString(mutatorOfNotifiableTreeMap.getData(currentUser.nickname)==null));
+        if(!mutatorOfNotifiableTreeMap.containsKey(message.sender) && !message.sender.equals(currentUser.nickname)){
+            mutatorOfNotifiableTreeMap.addOrChangeItem(message.sender,new CommonClasses.Message(message));
+        }
+        else if(!message.sender.equals(currentUser.nickname) &&
+                    mutatorOfNotifiableTreeMap.getData(message.sender).date.before(message.date)) {
+                mutatorOfNotifiableTreeMap.addOrChangeItem(message.sender,new CommonClasses.Message(message));
+        }
+        if(message.sender.equals(currentUser.nickname) && !notifiableLastMessages.containsKey(message.receiver)){
+            mutatorOfNotifiableTreeMap.addOrChangeItem(message.receiver,new CommonClasses.Message(message.receiver,currentUser.nickname
+            ,"This user hasn't replied yet","1000-00-00 00:00:00"));
+        }
+        if(message.sender.equals(currentCollocutor) || message.receiver.equals(currentCollocutor)){
+            mutatorOfNotifiableCollocation.add(message);
+        }
+        }catch (SQLiteConstraintException e){
+            e.printStackTrace();
+            Log.d("SQLite","You have tried to add duplicate value. Usually this means something bad,but not here,right?");
+        }
+    }
+
+    public void setCurrentCollocutor(String nickname){
+        currentCollocutor = nickname;
+    }
+
+//_____________________________________________Dice roll system______________________________________________________________
+
+    public void startBattle(final String collocutor, final boolean isSender, final RunnableWithResource<Integer> onSuccess,
+                            final RunnableWithResource<String> onFault){
+        if(!isOnline) establishConnection(ngrokHost,port);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    int tries = 0;
+                    while (!isOnline && tries < 20) {
+                        tries++;
+                        Thread.sleep(100);
+                    }
+                    if(isOnline && diceResultRunnables == null){
+                        String operation;
+                        if(isSender) {
+                            operation = "startBattle";
+                        }
+                        else {
+                            operation = "battleResponse";
+                        }
+                        diceResultRunnables = new Pair<>(null,null);
+                        serverOutputStream.writeObject(new StartBattleQuery(currentUser.connectionKey,currentUser.nickname,
+                                collocutor,true,operation));
+                        diceResultRunnables.firstObj=onSuccess;
+                        diceResultRunnables.secondObj=onFault;
+                    }else if(!isOnline){
+                        Log.d("start Battle","Connection lost");
+                        dialogueHandler.obtainMessage(-10,
+                                new Pair<RunnableWithResource,String>(onFault,"Connection lost")).sendToTarget();
+                        diceResultRunnables = null;
+                    }else {
+                        dialogueHandler.obtainMessage(-10,
+                                new Pair<RunnableWithResource,String>(onFault,"Game request already sent"));
+                    }
+                }catch(InterruptedException | IOException e){
+                    e.printStackTrace();
+                    dialogueHandler.obtainMessage(-10,
+                            new Pair<RunnableWithResource,String>(onFault,"Connection lost")).sendToTarget();
+                    diceResultRunnables = null;
+                }
+            }
+        }).start();
+    }
+
+    public void declineBattle(final String collocutor){
+        if(!isOnline) establishConnection(ngrokHost,port);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try{
+                    int tries=0;
+                    while(!isOnline && tries<20){
+                        tries++;
+                        Thread.sleep(100);
+                    }
+                    if(isOnline){
+                        serverOutputStream.writeObject(new StartBattleQuery(currentUser.connectionKey,currentUser.nickname,
+                                collocutor,false,"battleResponse"));
+                    }else{
+                        dialogueHandler.obtainMessage(-20,"Connection lost").sendToTarget();
+                    }
+                }catch (InterruptedException | IOException e){
+                    e.printStackTrace();
+                    dialogueHandler.obtainMessage(-20,"Connection lost").sendToTarget();
+                }
+            }
+        }).start();
+    }
+
+    public void setDiceRequestRunnable(RunnableWithResource<String> runnableWithResource){
+        this.diceRequestRunnable = runnableWithResource;
+    }
+
 
 //_______________________________________________Helper classes______________________________________________________________
 
@@ -522,9 +854,40 @@ public class BigBlackBox{
         }
             @Override
             public void handleMessage(Message msg) {
-                ((Runnable)msg.obj).run();
+            switch (msg.what) {
+                case 0:
+                    ((Runnable) msg.obj).run();
+                    break;
+                case 10:
+                    Pair<RunnableWithResource<Integer>,Integer> pairI =
+                            ((Pair<RunnableWithResource<Integer>,Integer>)msg.obj);
+                    pairI.firstObj.run(pairI.secondObj);
+                    break;
+                case -5:
+                    Toast.makeText(appContext,((Pair<Runnable,String>) msg.obj).secondObj,Toast.LENGTH_LONG).show();
+                    ((Pair<Runnable,String>) msg.obj).firstObj.run();
+                    break;
+                case -10:
+                    Pair<RunnableWithResource<String>,String> pairS = (Pair<RunnableWithResource<String>,String>)msg.obj;
+                    Toast.makeText(appContext,pairS.secondObj,Toast.LENGTH_LONG).show();
+                    pairS.firstObj.run(pairS.secondObj);
+                    break;
+                case 20:
+                    Pair<RunnableWithResource<Integer>,Pair<Integer,Integer>> pairDI=
+                            (Pair<RunnableWithResource<Integer>,Pair<Integer,Integer>>)msg.obj;
+                    pairDI.firstObj.run(pairDI.secondObj.firstObj,pairDI.secondObj.secondObj);
+                    break;
+                case 21:
+                    Pair<RunnableWithResource<String>,String> pairRunStr =
+                            (Pair<RunnableWithResource<String>,String>)msg.obj;
+                    pairRunStr.firstObj.run(pairRunStr.secondObj);
+                    break;
+                default:
+                    throw new IllegalStateException("Unexpected value: " + msg.what);
+            }
             }
         }
+
 
         private class RunnableWithCommentary{
         Runnable runnable;
@@ -535,14 +898,6 @@ public class BigBlackBox{
         }
         }
 
-        private class Pair<T_1,T_2> {
-            T_1 firstObj;
-            T_2 secondObj;
-            Pair(T_1 firstObj,T_2 secondObj){
-                this.firstObj = firstObj;
-                this.secondObj = secondObj;
-            }
-        }
 
         private class Description{
             String nickname;

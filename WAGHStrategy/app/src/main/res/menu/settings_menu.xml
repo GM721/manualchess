@@ -4,11 +4,6 @@
     android:orientation="vertical" android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <item android:id="@+id/refreshConnection"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:title="Refresh connection" />
-
     <item android:id="@+id/goBack"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

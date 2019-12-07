@@ -21,10 +21,13 @@ import com.example.waghstrategy.R;
 
 public class MainActivity extends AppCompatActivity {
 
+    MyApplication myApp;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        final BigBlackBox bigBlackBox = ((MyApplication) getApplication()).bigBlackBox;
+        myApp = ((MyApplication) getApplication());
+        myApp.currentActivity=this;
+        final BigBlackBox bigBlackBox = myApp.bigBlackBox;
         setContentView(R.layout.activity_main);
         final RecyclerView recyclerView = findViewById(R.id.authorisedRecyclerView);
         recyclerView.setAdapter(new AuthorisedAdapter(this,bigBlackBox));
@@ -81,4 +84,26 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        myApp.currentActivity=this;
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        myApp.currentActivity=null;
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        myApp.currentActivity=null;
+    }
+
+    @Override
+    public void onBackPressed() {
+        this.finishAffinity();
+    }
 }

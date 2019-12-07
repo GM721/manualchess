@@ -10,8 +10,9 @@ public class LoggedUsersContract {
         public static final String tableName = "AuthorisedUsers";
         public static final String nickname = "Nickname";
         public static final String connectionKey = "ConnectionKey";
+        public static final String date = "Date";
         public static final String  SQLCreateDB = "CREATE TABLE " + tableName + "( " +
-                nickname + " TINYTEXT PRIMARY KEY," + connectionKey + " INTEGER)";
+                nickname + " TINYTEXT PRIMARY KEY," + connectionKey + " INTEGER,"+ date + " DATETIME)";
         public static final String SQLDeleteDB = "DROP TABLE IF EXISTS " + tableName;
 
     }

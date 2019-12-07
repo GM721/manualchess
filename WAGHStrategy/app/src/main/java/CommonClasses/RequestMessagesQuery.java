@@ -1,6 +1,6 @@
 package CommonClasses;
 
-import java.util.Calendar;
+import CommonClasses.Calendar;
 
 public class RequestMessagesQuery extends Query {
     private static final long serialVersionUID = 12;
